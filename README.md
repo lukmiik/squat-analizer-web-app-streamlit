@@ -1,0 +1,1 @@
+# squat-analizer-web-app-streamlit
