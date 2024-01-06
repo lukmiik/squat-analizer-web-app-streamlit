@@ -89,8 +89,8 @@ if video_data:
                         human_byte_tracker_tracks = (
                             squat_analizer.human_byte_tracker.update(
                                 humans_detections_converted_to_byte_tracker_format,
-                                frame.shape,
-                                frame.shape,
+                                (frame.shape[0], frame.shape[1]),
+                                (frame.shape[0], frame.shape[1]),
                             )
                         )
                         (

@@ -1,20 +1,11 @@
 import numpy as np
+from cjm_byte_track.core import BYTETracker, STrack
 from onemetric.cv.utils.iou import box_iou_batch
-from yolox.tracker.byte_tracker import BYTETracker, STrack
-
-
-class ByteTrackArgs:
-    track_thresh = 0.6
-    track_buffer = 100
-    match_thresh = 0.8
-    aspect_ratio_thresh = 10.0
-    min_box_area = 1.0
-    mot20 = False
 
 
 class BaseByteTrackObjectTracking(BYTETracker):
     def __init__(self, frame_rate: int = 30) -> None:
-        super().__init__(ByteTrackArgs, frame_rate)
+        super().__init__(0.6, 100, 0.8, frame_rate)
 
     def convert_detections_data(
         self, bboxes: list[np.ndarray], conf_scores: list[np.float32]
