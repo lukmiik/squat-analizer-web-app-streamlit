@@ -1,4 +1,15 @@
+Cython==3.0.7
+cython-bbox==0.1.5
+lap==0.4.0
+loguru==0.7.2
+mediapipe==0.10.9
 numpy==1.22.4
 opencv-python-headless==4.9.0.80
+onemetric==0.1.2
+onnxruntime==1.16.3
 pyav==12.0.2
+scipy==1.11.4
 streamlit==1.29.0
+ultralytics==8.0.229
+pycocotools==git+https://github.com/cocodataset/cocoapi.git#subdirectory=PythonAPI
+ByteTrack==git+https://github.com/ifzhang/ByteTrack.git
