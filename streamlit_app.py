@@ -1,4 +1,7 @@
 import io
+import os
+import random
+import string
 from typing import TYPE_CHECKING
 
 import av
@@ -15,8 +18,6 @@ st.title('Squat analizer')
 
 video_data = st.file_uploader("Upload file", ['mp4', 'mov', 'avi'])
 
-file_to_analize = './file_to_analize.mp4'
-
 
 def write_bytesio_to_file(filename: str, bytesio: 'UploadedFile') -> None:
     with open(filename, "wb") as outfile:
@@ -26,6 +27,15 @@ def write_bytesio_to_file(filename: str, bytesio: 'UploadedFile') -> None:
 if video_data:
     progress_text = "Analyzing video..."
     my_bar = st.progress(0, text=progress_text)
+    while os.path.exists(
+        file_to_analize := (
+            ''.join(
+                random.choice(string.ascii_letters + string.digits) for _ in range(20)
+            )
+            + ".mp4"
+        )
+    ):
+        pass
     write_bytesio_to_file(file_to_analize, video_data)
     squat_analizer = SquatAnalizer(file_to_analize)
     squat_analizer.stop_printing_yolo_logs()
@@ -196,3 +206,4 @@ if video_data:
     col2.video(output_memory_file)
     df = pd.DataFrame(main_squat_data)
     st.table(df.style.format({"eccentric_time": "{:.2f}", "concentric_time": "{:.2f}"}))
+    os.remove(file_to_analize)
