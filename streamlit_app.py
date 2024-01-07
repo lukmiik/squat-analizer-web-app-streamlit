@@ -1,5 +1,4 @@
 import io
-import time
 from typing import TYPE_CHECKING
 
 import av
@@ -27,7 +26,6 @@ def write_bytesio_to_file(filename: str, bytesio: 'UploadedFile') -> None:
 if video_data:
     progress_text = "Analyzing video..."
     my_bar = st.progress(0, text=progress_text)
-    t0 = time.perf_counter()
     write_bytesio_to_file(file_to_analize, video_data)
     squat_analizer = SquatAnalizer(file_to_analize)
     squat_analizer.stop_printing_yolo_logs()
@@ -185,7 +183,6 @@ if video_data:
             )
         else:
             main_squat_data = squat_analizer.get_main_squat_data()
-            print(main_squat_data)
             squat_analizer.video.release()
             if squat_analizer.video_writer is not None:
                 squat_analizer.video_writer.release()
@@ -194,7 +191,6 @@ if video_data:
     packet = stream.encode(None)
     output.mux(packet)  # type: ignore
     output.close()  # type: ignore
-    print(f'Total time: {time.perf_counter() - t0} seconds')
     output_memory_file.seek(0)
     col1, col2, col3 = st.columns([1, 2, 1])
     col2.video(output_memory_file)

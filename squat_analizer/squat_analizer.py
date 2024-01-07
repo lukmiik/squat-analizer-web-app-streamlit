@@ -684,7 +684,9 @@ class SquatAnalizer(BaseVideoObjectDetection, BaseMediaPipePoseEstimation):
         return frame
 
     def get_main_squat_data(self) -> list[dict]:
-        main_squat_data_key = max(
-            self.squat_data, key=lambda k: len(self.squat_data[k])
-        )
-        return self.squat_data[main_squat_data_key]
+        if self.squat_data:
+            main_squat_data_key = max(
+                self.squat_data, key=lambda k: len(self.squat_data[k])
+            )
+            return self.squat_data[main_squat_data_key]
+        return []
