@@ -89,9 +89,9 @@ class SquatAnalizer(BaseVideoObjectDetection, BaseMediaPipePoseEstimation):
         self.previous_feet_pos: tuple[str, float, float] | None = None
         self.n_of_frames_feet_moving: int = 0
         self.lowest_main_barbell_center_y: float | None = None
-        self.last_depth_data: tuple[
-            int, int, int, int, tuple[int, int, int]
-        ] | None = None
+        self.last_depth_data: tuple[int, int, int, int, tuple[int, int, int]] | None = (
+            None
+        )
         self.main_human_roi: np.ndarray | None = None
         self.finish_rep_flag: bool = False
         self.squat_data: dict[int, list] = {}
@@ -618,9 +618,7 @@ class SquatAnalizer(BaseVideoObjectDetection, BaseMediaPipePoseEstimation):
         self, pose_landmarks: NormalizedLandmarkList
     ) -> None:
         if pose_landmarks:
-            self.hip_knee_angle = self.get_hip_knee_angle(
-                self.main_human_roi, pose_landmarks  # type: ignore
-            )
+            self.hip_knee_angle = self.get_hip_knee_angle(self.main_human_roi, pose_landmarks)  # type: ignore
             self.current_rep = True
             if (
                 self.HIP_KNEE_ANGLE_SQUAT_DEPTH_LOWER_LIMIT
@@ -628,15 +626,13 @@ class SquatAnalizer(BaseVideoObjectDetection, BaseMediaPipePoseEstimation):
                 <= self.HIP_KNEE_ANGLE_SQUAT_DEPTH_UPPER_LIMIT
             ):
                 self.depth = True
-        self.concentric_phase_start_frame = (
-            self.eccentric_phase_finish_frame
-        ) = self.n_of_frames
+        self.concentric_phase_start_frame = self.eccentric_phase_finish_frame = (
+            self.n_of_frames
+        )
         self.current_state = self.CONCENTRIC_PHASE_STATE
 
     def check_hip_knee_angle(self, pose_landmarks: NormalizedLandmarkList) -> None:
-        self.hip_knee_angle = self.get_hip_knee_angle(
-            self.main_human_roi, pose_landmarks  # type: ignore
-        )
+        self.hip_knee_angle = self.get_hip_knee_angle(self.main_human_roi, pose_landmarks)  # type: ignore
         if (
             not self.current_rep
             and self.HIP_KNEE_ANGLE_CURRENT_REP_LOWER_LIMIT
@@ -683,10 +679,24 @@ class SquatAnalizer(BaseVideoObjectDetection, BaseMediaPipePoseEstimation):
             return self.downscale_frame_by_height(frame, self.DESIRED_VIDEO_HEIGHT)
         return frame
 
+    def add_average_to_data(self, data: list[dict]) -> list[dict]:
+        avg_eccentric_time = sum(d['eccentric_time'] for d in data) / len(data)
+        avg_concentric_time = sum(d['concentric_time'] for d in data) / len(data)
+        avg_dict = {
+            'rep': 'avg',
+            'depth': '',
+            'eccentric_time': avg_eccentric_time,
+            'concentric_time': avg_concentric_time,
+        }
+        data.append(avg_dict)
+        return data
+
     def get_main_squat_data(self) -> list[dict]:
         if self.squat_data:
             main_squat_data_key = max(
                 self.squat_data, key=lambda k: len(self.squat_data[k])
             )
-            return self.squat_data[main_squat_data_key]
+            main_sqaut_data = self.squat_data[main_squat_data_key]
+            main_squat_data = self.add_average_to_data(main_sqaut_data)
+            return main_squat_data
         return []

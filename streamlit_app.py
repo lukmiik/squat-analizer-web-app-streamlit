@@ -1,7 +1,11 @@
 import io
+import logging
 import os
 import random
 import string
+import threading
+import time
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 import av
@@ -14,19 +18,46 @@ from squat_analizer.squat_analizer import SquatAnalizer
 if TYPE_CHECKING:
     from streamlit.runtime.uploaded_file_manager import UploadedFile
 
-st.title('Squat analizer')
+CURRENTLY_ANALIZED_VIDEOS = 'currently_analized_videos'
+FILE_DELETE_DELAY = 600
+LOG_DIRECTORY = 'logs'
 
-video_data = st.file_uploader("Upload file", ['mp4', 'mov', 'avi'])
+os.makedirs(CURRENTLY_ANALIZED_VIDEOS, exist_ok=True)
+os.makedirs(LOG_DIRECTORY, exist_ok=True)
+logging.basicConfig(
+    filename=os.path.join(LOG_DIRECTORY, 'info.log'),
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+)
+
+st.set_page_config(
+    layout="wide", page_icon=":weight_lifter:", page_title="Squat analizer"
+)
+_, col_main, _ = st.columns([1, 2, 1])
+col_main.title('Squat analizer :weight_lifter:')
+
+video_data = col_main.file_uploader("Upload file", ['mp4', 'mov', 'avi'])
+
+
+def delete_file_after_delay(filename: str, delay: int = FILE_DELETE_DELAY) -> None:
+    def delete_file() -> None:
+        time.sleep(delay)
+        if os.path.exists(filename):
+            os.remove(filename)
+
+    threading.Thread(target=delete_file).start()
 
 
 def write_bytesio_to_file(filename: str, bytesio: 'UploadedFile') -> None:
+    delete_file_after_delay(filename)
     with open(filename, "wb") as outfile:
         outfile.write(bytesio.getbuffer())
 
 
 if video_data:
+    start_time = perf_counter()
     progress_text = "Analyzing video..."
-    my_bar = st.progress(0, text=progress_text)
+    my_bar = col_main.progress(0, text=progress_text)
     while os.path.exists(
         file_to_analize := (
             ''.join(
@@ -36,8 +67,11 @@ if video_data:
         )
     ):
         pass
-    write_bytesio_to_file(file_to_analize, video_data)
-    squat_analizer = SquatAnalizer(file_to_analize)
+    file_to_analize_path = os.path.join(CURRENTLY_ANALIZED_VIDEOS, file_to_analize)
+    write_bytesio_to_file(file_to_analize_path, video_data)
+    size_in_bytes = video_data.getbuffer().nbytes
+    size_in_mb = size_in_bytes / (1024 * 1024)
+    squat_analizer = SquatAnalizer(file_to_analize_path)
     squat_analizer.stop_printing_yolo_logs()
     output_memory_file = io.BytesIO()
     output = av.open(output_memory_file, 'w', format="mp4")
@@ -47,6 +81,7 @@ if video_data:
     stream.pix_fmt = 'yuv420p'
     stream.options = {'crf': '17'}
     total_frames = squat_analizer.video.get(cv2.CAP_PROP_FRAME_COUNT)
+    length_in_seconds = total_frames / squat_analizer.fps
     squat_analizer.init_squat_stats()
     squat_analizer.init_tracker_variables()
     while True:
@@ -111,7 +146,7 @@ if video_data:
                         if human_tracker_ids is not None:
                             human_barbell_highest_conf_human_tracker_id = squat_analizer.get_human_barbell_highest_conf_tracker_id(
                                 human_bboxes_idxs,  # type: ignore
-                                humans_with_barbells_conf_scores,
+                                humans_with_barbells_conf_scores,  # type: ignore
                                 barbells_of_humans_conf_scores,
                                 human_tracker_ids,
                             )
@@ -202,8 +237,20 @@ if video_data:
     output.mux(packet)  # type: ignore
     output.close()  # type: ignore
     output_memory_file.seek(0)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    col2.video(output_memory_file)
+    _, col1, col2, _ = st.columns([1, 0.8, 1.2, 1])
+    col1.video(output_memory_file)
     df = pd.DataFrame(main_squat_data)
-    st.table(df.style.format({"eccentric_time": "{:.2f}", "concentric_time": "{:.2f}"}))
-    os.remove(file_to_analize)
+    df['depth'] = df['depth'].apply(
+        lambda x: '✅' if x is True else ('❌' if x is False else '')
+    )
+    col2.dataframe(
+        df.style.format({"eccentric_time": "{:.2f}", "concentric_time": "{:.2f}"}),
+        use_container_width=True,
+        hide_index=True,
+    )
+    os.remove(file_to_analize_path)
+    end_time = perf_counter()
+    time_elapsed = end_time - start_time
+    logging.info(
+        f"Video length: {length_in_seconds:.2f} seconds, File size: {size_in_mb:.2f} mb, Time elapsed main function: {time_elapsed:.2f} seconds"
+    )
