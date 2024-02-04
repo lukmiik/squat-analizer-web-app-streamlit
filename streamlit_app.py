@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 CURRENTLY_ANALIZED_VIDEOS = 'currently_analized_videos'
-FILE_DELETE_DELAY = 600
+FILE_DELETE_DELAY = 3600
 LOG_DIRECTORY = 'logs'
 
 os.makedirs(CURRENTLY_ANALIZED_VIDEOS, exist_ok=True)
@@ -82,6 +82,7 @@ if video_data:
     stream.options = {'crf': '17'}
     total_frames = squat_analizer.video.get(cv2.CAP_PROP_FRAME_COUNT)
     length_in_seconds = total_frames / squat_analizer.fps
+    uploaded_file_name = video_data.name
     squat_analizer.init_squat_stats()
     squat_analizer.init_tracker_variables()
     while True:
@@ -248,9 +249,8 @@ if video_data:
         use_container_width=True,
         hide_index=True,
     )
-    os.remove(file_to_analize_path)
     end_time = perf_counter()
     time_elapsed = end_time - start_time
     logging.info(
-        f"Video length: {length_in_seconds:.2f} seconds, File size: {size_in_mb:.2f} mb, Time elapsed main function: {time_elapsed:.2f} seconds"
+        f"Video name: '{uploaded_file_name}', Video length: {length_in_seconds:.2f} seconds, File size: {size_in_mb:.2f} mb, Time elapsed main function: {time_elapsed:.2f} seconds, Hardware {squat_analizer.models[0].device}"
     )

@@ -1,2 +1,3 @@
 [server]
 maxUploadSize = 400
+headless=true
