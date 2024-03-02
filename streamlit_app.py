@@ -216,7 +216,7 @@ if video_data:
                 or squat_analizer.current_state == squat_analizer.CONCENTRIC_PHASE_STATE
             ) and pose_landmarks:  # type: ignore
                 squat_analizer.draw_squat_depth_info(
-                    squat_analizer.main_human_roi,
+                    squat_analizer.main_human_roi, # type: ignore
                     pose_landmarks,  # type: ignore
                 )
             squat_analizer.draw_barbell_path(frame)
@@ -240,15 +240,18 @@ if video_data:
     output_memory_file.seek(0)
     _, col1, col2, _ = st.columns([1, 0.8, 1.2, 1])
     col1.video(output_memory_file)
-    df = pd.DataFrame(main_squat_data)
-    df['depth'] = df['depth'].apply(
-        lambda x: '✅' if x is True else ('❌' if x is False else '')
-    )
-    col2.dataframe(
-        df.style.format({"eccentric_time": "{:.2f}", "concentric_time": "{:.2f}"}),
-        use_container_width=True,
-        hide_index=True,
-    )
+    if main_squat_data:
+        df = pd.DataFrame(main_squat_data)
+        df['depth'] = df['depth'].apply(
+            lambda x: '✅' if x is True else ('❌' if x is False else '')
+        )
+        col2.dataframe(
+            df.style.format({"eccentric_time": "{:.2f}", "concentric_time": "{:.2f}"}),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        col2.info("No squats detected")
     end_time = perf_counter()
     time_elapsed = end_time - start_time
     logging.info(
