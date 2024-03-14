@@ -1,9 +1,12 @@
 from collections import deque
+import av
+from av.container.output import OutputContainer
 
 import cv2
 import numpy as np
 from mediapipe.framework.formats.landmark_pb2 import NormalizedLandmarkList
 from scipy.spatial.distance import cdist
+from streamlit.delta_generator import DeltaGenerator as stDeltaGenerator
 
 from squat_analizer.byte_track_object_tracking import BaseByteTrackObjectTracking
 from squat_analizer.mediapipe_pose_estimation import BaseMediaPipePoseEstimation
@@ -78,6 +81,7 @@ class SquatAnalizer(BaseVideoObjectDetection, BaseMediaPipePoseEstimation):
         self.barbell_byte_tracker = BaseByteTrackObjectTracking(self.fps)
         self.human_model = self.models[0]
         self.barbell_model = self.models[1]
+        self.stop_printing_yolo_logs()
 
     def init_squat_stats(self) -> None:
         self.current_state: str = self.PAUSE_STATE
@@ -700,3 +704,156 @@ class SquatAnalizer(BaseVideoObjectDetection, BaseMediaPipePoseEstimation):
             main_squat_data = self.add_average_to_data(main_sqaut_data)
             return main_squat_data
         return []
+
+    def analize_squat_streamlit(self, stream: OutputContainer, progress_bar: stDeltaGenerator, progress_text: str, output: OutputContainer) -> list[dict]:
+        total_frames = self.video.get(cv2.CAP_PROP_FRAME_COUNT)
+        self.init_squat_stats()
+        self.init_tracker_variables()
+        while True:
+            ret, frame = self.video.read()
+            if ret:
+                frame = self.downscale_video(frame)
+                self.n_of_frames += 1
+                humans = self.detect_humans(frame)
+                if humans:
+                    barbells = self.detect_barbells(frame)
+                    if barbells:
+                        self.init_humans_barbells_variables()
+                        self.set_humans_data(humans)
+                        self.set_barbells_data(barbells)
+                        humans_barbells_pairs = self.assign_humans_to_barbells(
+                            self.humans_points,
+                            self.barbells_points,
+                            self.humans_bboxes,
+                        )
+                        if humans_barbells_pairs:
+                            humans_with_barbells_bboxes = (
+                                self.get_bboxes_humans_with_barbells(
+                                    self.humans_bboxes, humans_barbells_pairs
+                                )
+                            )
+                            barbells_of_humans_bboxes = (
+                                self.get_bboxes_barbells_of_humans(
+                                    self.barbell_bboxes, humans_barbells_pairs
+                                )
+                            )
+                            humans_with_barbells_conf_scores = (
+                                self.get_conf_scores_humans_with_barbells(
+                                    self.humans_conf_scores, humans_barbells_pairs
+                                )
+                            )
+                            barbells_of_humans_conf_scores = (
+                                self.get_conf_scores_barbells_of_humans(
+                                    self.barbells_conf_scores,
+                                    humans_barbells_pairs,
+                                )
+                            )
+                            humans_detections_converted_to_byte_tracker_format = (
+                                self.human_byte_tracker.convert_detections_data(
+                                    humans_with_barbells_bboxes,
+                                    humans_with_barbells_conf_scores,
+                                )
+                            )
+                            human_byte_tracker_tracks = (
+                                self.human_byte_tracker.update(
+                                    humans_detections_converted_to_byte_tracker_format,
+                                    (frame.shape[0], frame.shape[1]),
+                                    (frame.shape[0], frame.shape[1]),
+                                )
+                            )
+                            (
+                                human_tracker_ids,
+                                human_bboxes_idxs,
+                            ) = self.human_byte_tracker.assign_ids_to_detections(
+                                humans_with_barbells_bboxes,
+                                human_byte_tracker_tracks,
+                            )
+                            if human_tracker_ids is not None:
+                                human_barbell_highest_conf_human_tracker_id = self.get_human_barbell_highest_conf_tracker_id(
+                                    human_bboxes_idxs,  # type: ignore
+                                    humans_with_barbells_conf_scores,  # type: ignore
+                                    barbells_of_humans_conf_scores,
+                                    human_tracker_ids,
+                                )
+                                self.check_main_human_tracker_id(
+                                    human_tracker_ids
+                                )
+                                self.check_main_human_tracker_id_based_on_highest_conf(
+                                    human_barbell_highest_conf_human_tracker_id
+                                )
+                                if (
+                                    self.main_human_tracker_id is not None
+                                    and self.main_human_tracker_id
+                                    in human_tracker_ids
+                                ):
+                                    self.barbell_assigned_to_main_human_bbox = (
+                                        self.get_main_bbox(
+                                            self.main_human_tracker_id,
+                                            human_tracker_ids,
+                                            human_bboxes_idxs,  # type: ignore
+                                            barbells_of_humans_bboxes,
+                                        )
+                                    )
+                                    self.main_barbell_center_y = self.get_coord_center_bbox(
+                                        self.barbell_assigned_to_main_human_bbox
+                                    )[
+                                        1
+                                    ]
+                                    self.main_human_bbox = (
+                                        self.get_main_bbox(
+                                            self.main_human_tracker_id,
+                                            human_tracker_ids,
+                                            human_bboxes_idxs,  # type: ignore
+                                            humans_with_barbells_bboxes,
+                                        )
+                                    )
+                                    self.main_human_roi = (
+                                        self.get_human_roi(
+                                            frame, self.main_human_bbox
+                                        )
+                                    )
+                                    pose_landmarks = (
+                                        self.get_pose_estimation_landmarks(
+                                            self.main_human_roi
+                                        )
+                                    )
+                                    if pose_landmarks:
+                                        self.set_side_based_on_legs(
+                                            pose_landmarks
+                                        )
+                                        if self.have_feet_moved(
+                                            self.main_human_roi,
+                                            self.main_human_bbox[0][0],
+                                            pose_landmarks,
+                                        ):
+                                            self.lowest_main_barbell_center_y = (
+                                                None
+                                            )
+                                            self.current_state = (
+                                                self.PAUSE_STATE
+                                            )
+                                    self.detect_and_update_squat_data(
+                                        pose_landmarks
+                                    )
+                if (
+                    self.current_state == self.ECCENTRIC_PHASE_STATE
+                    or self.current_state == self.CONCENTRIC_PHASE_STATE
+                ) and pose_landmarks:  # type: ignore
+                    self.draw_squat_depth_info(
+                        self.main_human_roi, # type: ignore
+                        pose_landmarks,  # type: ignore
+                    )
+                self.draw_barbell_path(frame)
+                website_video_frame = av.VideoFrame.from_ndarray(frame, format='bgr24')
+                packet = stream.encode(website_video_frame) # type: ignore
+                output.mux(packet) # type: ignore
+                progress_bar.progress(
+                    self.n_of_frames / total_frames,
+                    text=progress_text,
+                )
+            else:
+                main_squat_data = self.get_main_squat_data()
+                self.video.release()
+                if self.video_writer is not None:
+                    self.video_writer.release()
+                return main_squat_data
